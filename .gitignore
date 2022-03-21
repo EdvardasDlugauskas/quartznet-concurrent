@@ -91,3 +91,5 @@ node_modules
 docs/.vuepress/dist
 /node_modules
 BenchmarkDotNet.Artifacts
+.nuke
+temp

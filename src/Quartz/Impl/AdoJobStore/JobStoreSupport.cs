@@ -2536,6 +2536,7 @@ namespace Quartz.Impl.AdoJobStore
             TimeSpan timeWindow,
             CancellationToken cancellationToken = default)
         {
+            Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTriggers -- AcquireNextTriggers invoked");
             string? lockName;
             if (AcquireTriggersWithinLock || maxCount > 1)
             {
@@ -2546,33 +2547,40 @@ namespace Quartz.Impl.AdoJobStore
                 lockName = null;
             }
 
-            return await ExecuteInNonManagedTXLock(
-                lockName,
-                conn => AcquireNextTrigger(conn, noLaterThan, maxCount, timeWindow, cancellationToken), async (conn, result) =>
+        var triggers = await ExecuteInNonManagedTXLock(
+            lockName,
+            conn => AcquireNextTrigger(conn, noLaterThan, maxCount, timeWindow, cancellationToken), async (conn, result) =>
                 {
-                    try
+                try
                     {
-                        var acquired = await Delegate.SelectInstancesFiredTriggerRecords(conn, InstanceId, cancellationToken).ConfigureAwait(false);
-                        var fireInstanceIds = new HashSet<string>();
-                        foreach (FiredTriggerRecord ft in acquired)
+                    Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTriggers:ExecuteInNonManagedTXLock -- AcquireNextTrigger returned {result.Count} triggers: {{@triggers}}", result);
+                    var acquired = await Delegate.SelectInstancesFiredTriggerRecords(conn, InstanceId, cancellationToken).ConfigureAwait(false);
+                    Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTriggers:ExecuteInNonManagedTXLock -- Delegate.SelectInstancesFiredTriggerRecords returned {acquired.Count} acquired triggers: {{@triggers}}", acquired);
+                    var fireInstanceIds = new HashSet<string>();
+                    foreach (FiredTriggerRecord ft in acquired)
                         {
-                            fireInstanceIds.Add(ft.FireInstanceId!);
+                        fireInstanceIds.Add(ft.FireInstanceId!);
                         }
-                        foreach (IOperableTrigger tr in result)
+                    foreach (IOperableTrigger tr in result)
                         {
-                            if (fireInstanceIds.Contains(tr.FireInstanceId))
+                        if (fireInstanceIds.Contains(tr.FireInstanceId))
                             {
-                                return true;
+                            Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTriggers:ExecuteInNonManagedTXLock -- Acquired trigger returned {result.Count} triggers");
+                            return true;
                             }
                         }
-                        return false;
+                    Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTriggers:ExecuteInNonManagedTXLock -- AcquireNextTrigger returned {result.Count} triggers");
+                    return false;
                     }
-                    catch (Exception e)
+                catch (Exception e)
                     {
-                        throw new JobPersistenceException("error validating trigger acquisition", e);
+                    throw new JobPersistenceException("error validating trigger acquisition", e);
                     }
                 },
-                cancellationToken).ConfigureAwait(false);
+            cancellationToken).ConfigureAwait(false);
+        
+        Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTriggers -- AcquireNextTriggers finished with {{@triggers}}", triggers);
+        return triggers;
         }
 
         // TODO: this really ought to return something like a FiredTriggerBundle,
@@ -2601,7 +2609,8 @@ namespace Quartz.Impl.AdoJobStore
                 try
                 {
                     var keys = await Delegate.SelectTriggerToAcquire(conn, noLaterThan + timeWindow, MisfireTime, maxCount, cancellationToken).ConfigureAwait(false);
-
+                    Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTrigger -- {keys.Count} ready to acquire");
+                
                     // No trigger is ready to fire yet.
                     if (keys == null || keys.Count == 0)
                     {
@@ -2614,6 +2623,7 @@ namespace Quartz.Impl.AdoJobStore
                     {
                         // If our trigger is no longer available, try a new one.
                         var nextTrigger = await RetrieveTrigger(conn, triggerKey, cancellationToken).ConfigureAwait(false);
+                        Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTrigger -- RetrieveTrigger returned {{@nextTrigger}}", nextTrigger);
                         if (nextTrigger == null)
                         {
                             continue; // next trigger
@@ -2641,13 +2651,17 @@ namespace Quartz.Impl.AdoJobStore
                             continue;
                         }
 
+                        Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTrigger -- Job concurrent execution disallowed set to {job.ConcurrentExecutionDisallowed}.");
+
                         if (job.ConcurrentExecutionDisallowed)
                         {
                             if (acquiredJobKeysForNoConcurrentExec.Contains(jobKey))
-                            {
+                                {
+                                Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTrigger -- JobKey already acquired, rejecting: {{@JobKey}}", jobKey);
                                 continue; // next trigger
-                            }
-                            acquiredJobKeysForNoConcurrentExec.Add(jobKey);
+                                }
+                        Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTrigger -- JobKey of next trigger is allowed: {{@JobKey}}", jobKey);
+                        acquiredJobKeysForNoConcurrentExec.Add(jobKey);
                         }
 
                         var nextFireTimeUtc = nextTrigger.GetNextFireTimeUtc();
@@ -2708,6 +2722,7 @@ namespace Quartz.Impl.AdoJobStore
             } while (true);
 
             // Return the acquired trigger list
+            Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:AcquireNextTrigger -- AcquireNextTrigger returning {acquiredTriggers.Count} triggers: {{@triggers}}", acquiredTriggers);
             return acquiredTriggers;
         }
 

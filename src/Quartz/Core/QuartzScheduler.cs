@@ -288,7 +288,7 @@ namespace Quartz.Core
 
             SchedulerSignaler = new SchedulerSignalerImpl(this, schedThread);
 
-            log.InfoFormat("Quartz Scheduler v.{0} created.", Version);
+            log.InfoFormat("Fork Quartz Scheduler v.{0} created.", Version);
         }
 
         public void Initialize()

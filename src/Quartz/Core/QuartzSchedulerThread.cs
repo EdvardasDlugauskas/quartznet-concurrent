@@ -259,8 +259,10 @@ namespace Quartz.Core
                         {
                             var noLaterThan = now + idleWaitTime;
                             var maxCount = Math.Min(availThreadCount, qsRsrcs.MaxBatchSize);
+                            Log.Debug($"[QuartzFork.Quartz] QuartzSchedulerThread:Run -- maxCount set to {maxCount} from min of availThreadCount {availThreadCount} and qsRsrcs.MaxBatchSize {qsRsrcs.MaxBatchSize}");
                             triggers = new List<IOperableTrigger>(await qsRsrcs.JobStore.AcquireNextTriggers(noLaterThan, maxCount, qsRsrcs.BatchTimeWindow, CancellationToken.None).ConfigureAwait(false));
                             lastAcquireFailed = false;
+                            Log.Debug($"[QuartzFork.Quartz] QuartzSchedulerThread:Run -- Batch acquisition of {triggers?.Count ?? 0} triggers");
                             if (Log.IsDebugEnabled())
                             {
                                 Log.DebugFormat("Batch acquisition of {0} triggers", triggers?.Count ?? 0);
@@ -414,6 +416,9 @@ namespace Quartz.Core
                                     continue;
                                 }
 
+                                
+                                var jobName = bndle.Trigger.JobDataMap["JobName"];
+                                Log.Debug($"[QuartzFork.Quartz] QuartzSchedulerThread:Run -- Run JobRunShell for {bndle.Trigger.Key.Group}.{bndle.Trigger.Key.Name}.{jobName}");
                                 var threadPoolRunResult = qsRsrcs.ThreadPool.RunInThread(() => shell.Run(CancellationToken.None));
                                 if (threadPoolRunResult == false)
                                 {

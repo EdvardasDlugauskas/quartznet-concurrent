@@ -2629,6 +2629,8 @@ namespace Quartz.Impl.AdoJobStore
             int maxCount,
             CancellationToken cancellationToken = default)
         {
+            logger.Debug($"[QuartzFork.Quartz] StdAdoDelegate:SelectTriggerToAcquire -- invoked with noLaterThan({noLaterThan}), noEarlierThan({noEarlierThan}), maxCount({maxCount})");
+        
             if (maxCount < 1)
             {
                 maxCount = 1; // we want at least one trigger back.
@@ -2643,11 +2645,15 @@ namespace Quartz.Impl.AdoJobStore
                 AddCommandParameter(cmd, "noLaterThan", GetDbDateTimeValue(noLaterThan));
                 AddCommandParameter(cmd, "noEarlierThan", GetDbDateTimeValue(noEarlierThan));
 
+                logger.Debug($"[QuartzFork.Quartz] StdAdoDelegate:SelectTriggerToAcquire -- executing DB Command: {cmd.CommandText}");
+            
                 using (var rs = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
                 {
                     while (await rs.ReadAsync(cancellationToken).ConfigureAwait(false) && nextTriggers.Count < maxCount)
                     {
-                        nextTriggers.Add(new TriggerKey((string) rs[ColumnTriggerName], (string) rs[ColumnTriggerGroup]));
+                    var triggerKey = new TriggerKey((string) rs[ColumnTriggerName], (string) rs[ColumnTriggerGroup]);
+                    logger.Debug($"[QuartzFork.Quartz] StdAdoDelegate:SelectTriggerToAcquire -- adding trigger result from db (group.name): {triggerKey.Group}.{triggerKey.Name}");
+                    nextTriggers.Add(triggerKey);
                     }
                 }
                 return nextTriggers;
