@@ -669,6 +669,7 @@ namespace Quartz.Impl.AdoJobStore
                     StatePausedBlocked, cancellationToken).ConfigureAwait(false);
 
                 Log.Info("Freed " + rows + " triggers from 'acquired' / 'blocked' state.");
+                Log.Info("[QuartzFork.Quartz] States were set to StateWaiting.");
 
                 // clean up misfired jobs
                 await RecoverMisfiredJobs(conn, true, cancellationToken).ConfigureAwait(false);
@@ -677,15 +678,16 @@ namespace Quartz.Impl.AdoJobStore
                 var recoveringJobTriggers = await Delegate.SelectTriggersForRecoveringJobs(conn, cancellationToken).ConfigureAwait(false);
                 Log.Info("Recovering " + recoveringJobTriggers.Count +
                          " jobs that were in-progress at the time of the last shut-down.");
-
+            
                 foreach (IOperableTrigger trigger in recoveringJobTriggers)
-                {
-                    if (await JobExists(conn, trigger.JobKey, cancellationToken).ConfigureAwait(false))
                     {
+                    if (await JobExists(conn, trigger.JobKey, cancellationToken).ConfigureAwait(false))
+                        {
                         trigger.ComputeFirstFireTimeUtc(null);
+                        Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:RecoverJobs -- storing recovered trigger with StateWaiting {{@trigger}}", trigger);
                         await StoreTrigger(conn, trigger, null, false, StateWaiting, false, true, cancellationToken).ConfigureAwait(false);
+                        }
                     }
-                }
                 Log.Info("Recovery complete.");
 
                 // remove lingering 'complete' triggers...
@@ -757,6 +759,7 @@ namespace Quartz.Impl.AdoJobStore
                     continue;
                 }
 
+                Log.Debug($"[QuartzFork.Quartz] JobStoreSupport:RecoverMisfiredJobs -- updating misfired trigger to StateWaiting {{@trigger}}", trig);
                 await DoUpdateOfMisfiredTrigger(conn, trig, false, StateWaiting, recovering).ConfigureAwait(false);
 
                 DateTimeOffset? nextTime = trig.GetNextFireTimeUtc();
